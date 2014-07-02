@@ -2,13 +2,14 @@
 //
 #include "stdafx.h"
 
-//#define FIRSTBLOCK  0x0173d000 //yuna 2
-#define FIRSTBLOCK  0x042f9000 //yuna 1
+#define FIRSTBLOCK  0x0173d000 //yuna 2
+//#define FIRSTBLOCK  0x042f9000 //yuna 1
 #define BLOCKLENGTH 0x4000
 #define OUTPUTFILE "E:/yuna/block_00.bin"
 #define OUTPUTTXT "E:/yuna/block_00.txt"
 #define OUTPUTTBL "E:/yuna/block_00.tbl"
-#define NUMBEROFBLOCKS 30
+#define OUTPUTCSV "E:/yuna/block_00.csv"
+#define NUMBEROFBLOCKS 30 //yuna 1
 #define READ 0
 #define WRITE 1
 
@@ -17,6 +18,7 @@ char data_buff[BLOCKLENGTH]; //set data buffer
 char filename[sizeof(OUTPUTFILE)] = OUTPUTFILE;
 char txtname[sizeof(OUTPUTTXT)] = OUTPUTTXT;
 char tblname[sizeof(OUTPUTTBL)] = OUTPUTTBL;
+char csvname[sizeof(OUTPUTCSV)] = OUTPUTCSV;
 int filepospointer = FIRSTBLOCK;
 int out_file_num = 0;
 unsigned int i;
@@ -27,6 +29,7 @@ const char out_file_char[11] = "0123456789";
 
 fstream iso; //input stream for iso
 fstream scr; //output stream for scripts
+fstream csv; //csv output stream
 
 void block_rw(bool operation, char* path)
 {
@@ -90,6 +93,20 @@ void output_txt_rw(bool operation, int length)
 	return;
 }
 
+void output_rw(bool operation)
+{
+	if (operation == WRITE){
+		scr.open(txtname, fstream::binary | fstream::out); //open file given by path
+		//scr.write(data, 0);
+	}
+	else{
+		scr.open(txtname, fstream::binary | fstream::in); //open file given by path
+		//scr.read(data, 0);
+	}
+	scr.close();
+	cout << txtname << endl;
+	return;
+}
 void find_script_head(){
 	dataptr = ((unsigned int)data_buff[1]) << 8;
 	i = 0xFF & (unsigned int)data_buff[0];
@@ -225,6 +242,23 @@ void txt_2bin()
 	output_bin_rw(WRITE);
 	return;
 }
+
+void yuna2_csv_out()
+{
+	int headptr;
+	int endptr;
+
+	headptr = (int)data[0];
+	headptr += ((int)data[1] << 8);
+	headptr += 6;
+	endptr = headptr;
+	endptr += (int)data[2];
+	endptr += ((int)data[3] << 8);
+
+
+	return;
+}
+
 void output_file_inc()
 {
 	out_file_num++;
@@ -244,7 +278,12 @@ int main(int argc, char* argv[])
 	{
 		case 2:
 		{
-			cout << "ENTER;" << endl << "1 TO DUMP ISO TO BINARY SCRIPT" << endl << "2 TO GENERATE TABLE/TXT FILES FROM BINARY" << endl << "3 TO REGENERATE DAT FILES" << endl << "4 TO REINSERT SCRIPTS" << endl;
+			cout << "ENTER;" << endl << 
+				"1 TO DUMP ISO TO BINARY SCRIPT" << endl << 
+				"2 TO GENERATE TABLE/TXT FILES FROM BINARY" << endl << 
+				"3 TO REGENERATE DAT FILES" << endl << 
+				"4 TO REINSERT SCRIPTS" << endl <<
+				"5 YUNA 2 DAT POINTER EXTRACTOR" << endl;
 			char input;
 			cin >> input;
 			switch (input)
@@ -284,6 +323,17 @@ int main(int argc, char* argv[])
 				{
 					output_bin_rw(READ);
 					block_rw(WRITE, argv[1]);
+					output_file_inc();
+				}
+				break;
+			}
+			case ('5') : //insert
+			{
+				while (out_file_num != NUMBEROFBLOCKS)
+				{
+					output_bin_rw(READ);
+					yuna2_csv_out();
+					output_rw(WRITE);
 					output_file_inc();
 				}
 				break;
