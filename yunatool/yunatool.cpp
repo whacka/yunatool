@@ -8,7 +8,7 @@
 #define OUTPUTFILE "E:/yuna/block_00.bin"
 #define OUTPUTTXT "E:/yuna/block_00.txt"
 #define OUTPUTTBL "E:/yuna/block_00.tbl"
-#define OUTPUTCSV "E:/yuna/block_00.csv"
+#define OUTPUTTSV "E:/yuna/block_00.tsv"
 #define NUMBEROFBLOCKS 30 //yuna 1
 #define READ 0
 #define WRITE 1
@@ -18,18 +18,19 @@ char data_buff[BLOCKLENGTH]; //set data buffer
 char filename[sizeof(OUTPUTFILE)] = OUTPUTFILE;
 char txtname[sizeof(OUTPUTTXT)] = OUTPUTTXT;
 char tblname[sizeof(OUTPUTTBL)] = OUTPUTTBL;
-char csvname[sizeof(OUTPUTCSV)] = OUTPUTCSV;
+char tsvname[sizeof(OUTPUTTSV)] = OUTPUTTSV;
 int filepospointer = FIRSTBLOCK;
 int out_file_num = 0;
 unsigned int i;
 unsigned int dataptr;
 const int tens_off = sizeof(OUTPUTFILE)-7;
 const int ones_off = sizeof(OUTPUTFILE)-6;
+const unsigned int command_list[7] = { 0x1016, 0x2016, 0x3016, 0x4016, 0x101a, 0x101f, 0x3011 };
 const char out_file_char[11] = "0123456789";
 
 fstream iso; //input stream for iso
 fstream scr; //output stream for scripts
-fstream csv; //csv output stream
+fstream tsv; //tsv output stream
 
 void block_rw(bool operation, char* path)
 {
@@ -96,14 +97,14 @@ void output_txt_rw(bool operation, int length)
 void output_rw(bool operation)
 {
 	if (operation == WRITE){
-		scr.open(txtname, fstream::binary | fstream::out); //open file given by path
-		//scr.write(data, 0);
+		//scr.open(tsvname, fstream::out); //open file given by path
+		//scr.write();
 	}
 	else{
-		scr.open(txtname, fstream::binary | fstream::in); //open file given by path
+		//scr.open(tsvname, fstream::in); //open file given by path
 		//scr.read(data, 0);
 	}
-	scr.close();
+	//scr.close();
 	cout << txtname << endl;
 	return;
 }
@@ -243,18 +244,197 @@ void txt_2bin()
 	return;
 }
 
-void yuna2_csv_out()
+void yuna2_tsv_out()
 {
 	int headptr;
 	int endptr;
+	int relptr;
+	int relctr = 0;
 
-	headptr = (int)data[0];
-	headptr += ((int)data[1] << 8);
+	headptr = (data[0] & 0xFF);
+	headptr += (data[1] & 0xFF) << 8;
 	headptr += 6;
-	endptr = headptr;
-	endptr += (int)data[2];
-	endptr += ((int)data[3] << 8);
+	endptr = (data[2] & 0xFF);
+	endptr += (data[3] & 0xFF) << 8;
+	endptr += headptr;
 
+	string tsvstring;
+	string::iterator tsviterator;
+	tsv.open(tsvname, fstream::out);
+
+	/*tsvstring = data + headptr;
+	while (tsvstring.length() != 0)
+	{
+		tsv << "," << tsvstring << endl;
+		headptr = headptr + tsvstring.length();
+		headptr++;
+		tsvstring = data + headptr; 
+		cout << tsvstring.length() << endl;
+	}*/
+
+	/*do{
+		relptr = (data[relctr] & 0xFF);
+		relctr++;
+		relptr += (data[relctr] & 0xFF) << 8;
+		relctr++;
+		if (relptr < (endptr - headptr)){
+			tsvstring = data + relptr + headptr;
+			if (tsvstring[0] != 's'){
+				tsv << "[" << hex << relptr << "]," << tsvstring << endl;
+			} else {
+				tsv << "[" << hex << relptr << "]";
+			}
+		} else {
+			tsv << "[" << hex << relptr << "]";
+		}
+	} while (relctr < headptr);*/
+
+	/*do{
+		relptr = (data[relctr] & 0xFF);
+		relctr++;
+		relptr += (data[relctr] & 0xFF) << 8;
+		relctr++;
+		if (relptr < (endptr - headptr)){
+			tsvstring = data + relptr + headptr;
+			if (tsvstring[0] != 's'){
+				tsv << "[" << hex << relptr << "]," << tsvstring << endl;
+			}
+			else {
+				tsv << "[" << hex << relptr << "]";
+			}
+		}
+		else {
+			tsv << "[" << hex << relptr << "]";
+		}
+	} while (relctr < headptr);*/
+
+	do{
+		relptr = (data[relctr] & 0xFF);
+		relctr++;
+		relptr += (data[relctr] & 0xFF) << 8;
+		relctr++;
+		tsv << "[" << hex << relptr << "]";
+		for (int i = 0; i < (sizeof(command_list) / sizeof(unsigned int)); i++){
+			if (relptr == command_list[i]){
+				int u = relptr & 0xFF00;
+				u = u >> 12;
+				relptr = (data[relctr] & 0xFF);
+				relctr++;
+				relptr += (data[relctr] & 0xFF) << 8;
+				relctr++;
+				tsv << "[" << hex << relptr << "]";
+				if (relptr == 0){
+					if (i == 6){
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						tsv << "[" << hex << relptr << "]";
+
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						tsvstring = data + relptr + headptr;
+						tsv << "\t" << tsvstring << endl;
+						break;
+					}
+					if (i <= 3){
+						tsv << "\t";
+						i = 0xff;
+					} //else tsv << "\a";
+					do{
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						tsvstring = data + relptr + headptr;
+						tsv << tsvstring;
+						u--;
+					} while (u);
+					if (i == 0xff) tsv << endl;
+					break;
+				}
+			}
+		}
+	} while (relctr < headptr);
+
+	tsv.close();
+
+	return;
+}
+
+
+void yuna2_tsv_in()
+{
+	int headptr;
+	int endptr;
+	int relptr;
+	int relctr = 0;
+
+	headptr = (data[0] & 0xFF);
+	headptr += (data[1] & 0xFF) << 8;
+	headptr += 6;
+	endptr = (data[2] & 0xFF);
+	endptr += (data[3] & 0xFF) << 8;
+	endptr += headptr;
+
+	string tsvstring;
+	string::iterator tsviterator;
+	tsv.open(tsvname, fstream::out);
+
+	do{
+		relptr = (data[relctr] & 0xFF);
+		relctr++;
+		relptr += (data[relctr] & 0xFF) << 8;
+		relctr++;
+		tsv << "[" << hex << relptr << "]";
+		for (int i = 0; i < (sizeof(command_list) / sizeof(unsigned int)); i++){
+			if (relptr == command_list[i]){
+				int u = relptr & 0xFF00;
+				u = u >> 12;
+				relptr = (data[relctr] & 0xFF);
+				relctr++;
+				relptr += (data[relctr] & 0xFF) << 8;
+				relctr++;
+				tsv << "[" << hex << relptr << "]";
+				if (relptr == 0){
+					if (i == 6){
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						tsv << "[" << hex << relptr << "]";
+
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						tsvstring = data + relptr + headptr;
+						tsv << "\t" << tsvstring << endl;
+						break;
+					}
+					if (i <= 3){
+						tsv << "\t";
+						i = 0xff;
+					} //else tsv << "\a";
+					do{
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						tsvstring = data + relptr + headptr;
+						tsv << tsvstring;
+						u--;
+					} while (u);
+					if (i == 0xff) tsv << endl;
+					break;
+				}
+			}
+		}
+	} while (relctr < headptr);
+
+	tsv.close();
 
 	return;
 }
@@ -268,6 +448,8 @@ void output_file_inc()
 	txtname[ones_off] = out_file_char[out_file_num % 10];
 	tblname[tens_off] = out_file_char[out_file_num / 10];
 	tblname[ones_off] = out_file_char[out_file_num % 10];
+	tsvname[tens_off] = out_file_char[out_file_num / 10];
+	tsvname[ones_off] = out_file_char[out_file_num % 10];
 	return;
 }
 
@@ -332,7 +514,7 @@ int main(int argc, char* argv[])
 				while (out_file_num != NUMBEROFBLOCKS)
 				{
 					output_bin_rw(READ);
-					yuna2_csv_out();
+					yuna2_tsv_out();
 					output_rw(WRITE);
 					output_file_inc();
 				}
