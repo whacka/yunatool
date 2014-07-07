@@ -9,7 +9,7 @@
 #define OUTPUTTXT "E:/yuna/block_00.txt"
 #define OUTPUTTBL "E:/yuna/block_00.tbl"
 #define OUTPUTTSV "E:/yuna/block_00.tsv"
-#define NUMBEROFBLOCKS 30 //yuna 1
+#define NUMBEROFBLOCKS 2 //30 //yuna 1
 #define READ 0
 #define WRITE 1
 
@@ -25,8 +25,9 @@ unsigned int i;
 unsigned int dataptr;
 const int tens_off = sizeof(OUTPUTFILE)-7;
 const int ones_off = sizeof(OUTPUTFILE)-6;
-const unsigned int command_list[7] = { 0x1016, 0x2016, 0x3016, 0x4016, 0x101a, 0x101f, 0x3011 };
+const unsigned int command_list[11] = { 0x1016, 0x2016, 0x3016, 0x4016, 0x101a, 0x101f, 0x3011, 0x1004, 0x1005, 0x1022, 0x1001 };
 const char out_file_char[11] = "0123456789";
+const char hexadecimal[17] = "0123456789ABCDEF";
 
 fstream iso; //input stream for iso
 fstream scr; //output stream for scripts
@@ -260,7 +261,7 @@ void yuna2_tsv_out()
 
 	string tsvstring;
 	string::iterator tsviterator;
-	tsv.open(tsvname, fstream::out);
+	tsv.open(tsvname, fstream::out | fstream::binary);
 
 	/*tsvstring = data + headptr;
 	while (tsvstring.length() != 0)
@@ -313,7 +314,7 @@ void yuna2_tsv_out()
 		relctr++;
 		relptr += (data[relctr] & 0xFF) << 8;
 		relctr++;
-		tsv << "[" << hex << relptr << "]";
+		tsv << hex << relptr << '-';
 		for (int i = 0; i < (sizeof(command_list) / sizeof(unsigned int)); i++){
 			if (relptr == command_list[i]){
 				int u = relptr & 0xFF00;
@@ -322,14 +323,14 @@ void yuna2_tsv_out()
 				relctr++;
 				relptr += (data[relctr] & 0xFF) << 8;
 				relctr++;
-				tsv << "[" << hex << relptr << "]";
+				tsv << hex << relptr << '-';
 				if (relptr == 0){
 					if (i == 6){
 						relptr = (data[relctr] & 0xFF);
 						relctr++;
 						relptr += (data[relctr] & 0xFF) << 8;
 						relctr++;
-						tsv << "[" << hex << relptr << "]";
+						tsv << hex << relptr << '-';
 
 						relptr = (data[relctr] & 0xFF);
 						relctr++;
@@ -337,6 +338,22 @@ void yuna2_tsv_out()
 						relctr++;
 						tsvstring = data + relptr + headptr;
 						tsv << "\t" << tsvstring << endl;
+
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						relptr -= relctr;
+						tsv << hex << relptr << '-';
+						break;
+					}
+					if (i == 10){
+						relptr = (data[relctr] & 0xFF);
+						relctr++;
+						relptr += (data[relctr] & 0xFF) << 8;
+						relctr++;
+						relptr -= relctr;
+						tsv << hex << relptr << '-';
 						break;
 					}
 					if (i <= 3){
@@ -353,6 +370,7 @@ void yuna2_tsv_out()
 						u--;
 					} while (u);
 					if (i == 0xff) tsv << endl;
+					else tsv << '-';
 					break;
 				}
 			}
@@ -364,26 +382,451 @@ void yuna2_tsv_out()
 	return;
 }
 
-
 void yuna2_tsv_in()
 {
-	int headptr;
+	int headptr = 0;
 	int endptr;
 	int relptr;
+	int txtptr = 0;
 	int relctr = 0;
-
-	headptr = (data[0] & 0xFF);
-	headptr += (data[1] & 0xFF) << 8;
-	headptr += 6;
-	endptr = (data[2] & 0xFF);
-	endptr += (data[3] & 0xFF) << 8;
-	endptr += headptr;
+	int rel_offset = 0;
+	int relptrbuffer[BLOCKLENGTH];
+	memset(relptrbuffer, 0, sizeof(relptrbuffer));
 
 	string tsvstring;
+	stringstream tsvstringstream;
 	string::iterator tsviterator;
-	tsv.open(tsvname, fstream::out);
+	tsv.open(tsvname, ios::in);
 
-	do{
+	memset(data, 0, sizeof(data)); //make sure data is empty
+
+	tsv.getline(data_buff, unsigned(-1), '-');
+	int i = 0;
+	while (data_buff[i] != '\0')
+	{
+		if (data_buff[i] < 0x40){
+			headptr = headptr << 4;
+			headptr += (data_buff[i] & 0xF);
+		}
+		else{
+			headptr = headptr << 4;
+			headptr += (data_buff[i] & 0xF) + 9;
+		}
+		i++;
+	}
+	memset(data_buff, 0, sizeof(data_buff));
+	relptr = headptr;
+	headptr += 6;
+	txtptr = 0;
+	bool flag = false;
+	i = 0;
+
+	while (relctr != headptr){
+		i = 0;
+		while (data_buff[i] != '\0')
+		{
+			if (data_buff[i] < 0x40){
+				relptr = relptr << 4;
+				relptr += (data_buff[i] & 0xF);
+			}
+			else{
+				relptr = relptr << 4;
+				relptr += (data_buff[i] & 0xF) + 9;
+			}
+			i++;
+		}
+		data[relctr] = (relptr & 0xFF);
+		relctr++;
+		data[relctr] = (relptr & 0xFF00) >> 8;
+		relctr++;
+			switch (relptr){
+			case 0x4016:
+				relptrbuffer[relctr]--;
+			case 0x3016:
+				relptrbuffer[relctr]--;
+			case 0x2016:
+				relptrbuffer[relctr]--;
+			case 0x1016:
+				relctr -= 2; //no new line code yet
+				relptr = 0x1016;
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+
+				relptr = 0;	//fully parse next command
+				memset(data_buff, 0, sizeof(data_buff));
+				tsv.getline(data_buff, unsigned(-1), '-');
+				i = 0;
+				while (data_buff[i] != '\0')
+				{
+					if (data_buff[i] < 0x40){
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF);
+					}
+					else{
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF) + 9;
+					}
+					i++;
+				}
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+
+				tsv.ignore(unsigned(-1), '\t'); // read line of text
+				tsv.getline(data_buff, unsigned(-1), '\n');
+
+				i = 0; // copy text into data, formatting code may be added here as needed
+				while (data_buff[i] != '\0')
+				{
+					data[i + txtptr + headptr] = data_buff[i];
+					i++;
+				}
+				i++;
+
+				data[relctr] = (txtptr & 0xFF); // generate text pointer
+				relctr++;
+				data[relctr] = (txtptr & 0xFF00) >> 8;
+				relctr++;
+				txtptr += i;
+				break;
+			case 0x1001:
+				relptr = 0;	//fully parse next command
+				memset(data_buff, 0, sizeof(data_buff));
+				tsv.getline(data_buff, unsigned(-1), '-');
+				i = 0;
+				while (data_buff[i] != '\0')
+				{
+					if (data_buff[i] < 0x40){
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF);
+					}
+					else{
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF) + 9;
+					}
+					i++;
+				}
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+
+				relptr = 0;	//fully parse next command (i.e. pointer)
+				memset(data_buff, 0, sizeof(data_buff));
+				tsv.getline(data_buff, unsigned(-1), '-');
+				i = 0;
+				while (data_buff[i] != '\0')
+				{
+					if (data_buff[i] < 0x40){
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF);
+					}
+					else{
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF) + 9;
+					}
+					i++;
+				}
+				relptrbuffer[relctr] = relptr; // store pointer in buffer
+				relptr += relctr + 2;
+
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+				break;
+			case 0x3011:
+				relptr = 0;	//fully parse next command
+				memset(data_buff, 0, sizeof(data_buff));
+				tsv.getline(data_buff, unsigned(-1), '-');
+				i = 0;
+				while (data_buff[i] != '\0')
+				{
+					if (data_buff[i] < 0x40){
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF);
+					}
+					else{
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF) + 9;
+					}
+					i++;
+				}
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+
+				relptr = 0;	//fully parse next command
+				memset(data_buff, 0, sizeof(data_buff));
+				tsv.getline(data_buff, unsigned(-1), '-');
+				i = 0;
+				while (data_buff[i] != '\0')
+				{
+					if (data_buff[i] < 0x40){
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF);
+					}
+					else{
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF) + 9;
+					}
+					i++;
+				}
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+
+				tsv.ignore(unsigned(-1), '\t'); // read line of text
+				tsv.getline(data_buff, unsigned(-1), '\n');
+
+				i = 0; // copy text into data, formatting code may be added here as needed
+				while (data_buff[i] != '\0')
+				{
+					data[i + txtptr + headptr] = data_buff[i];
+					i++;
+				}
+				i++;
+
+				data[relctr] = (txtptr & 0xFF); // generate text pointer
+				relctr++;
+				data[relctr] = (txtptr & 0xFF00) >> 8;
+				relctr++;
+				txtptr += i;
+
+				relptr = 0;	//fully parse next command (i.e. pointer)
+				memset(data_buff, 0, sizeof(data_buff));
+				tsv.getline(data_buff, unsigned(-1), '-');
+				i = 0;
+				while (data_buff[i] != '\0')
+				{
+					if (data_buff[i] < 0x40){
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF);
+					}
+					else{
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF) + 9;
+					}
+					i++;
+				}
+				relptrbuffer[relctr] = relptr; // store pointer in buffer
+				relptr += relctr + 2;
+
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+				break;
+			case 0x101a:
+			case 0x101f:
+			case 0x1004:
+			case 0x1005:
+			case 0x1022:
+				relptr = 0;	//fully parse next command
+				memset(data_buff, 0, sizeof(data_buff));
+				tsv.getline(data_buff, unsigned(-1), '-');
+				i = 0;
+				while (data_buff[i] != '\0')
+				{
+					if (data_buff[i] < 0x40){
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF);
+					}
+					else{
+						relptr = relptr << 4;
+						relptr += (data_buff[i] & 0xF) + 9;
+					}
+					i++;
+				}
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+
+				tsv.getline(data_buff, unsigned(-1), '-');
+
+				i = 0; // copy text into data, formatting code may be added here as needed
+				while (data_buff[i] != '\0')
+				{
+					data[i + txtptr + headptr] = data_buff[i];
+					i++;
+				}
+				i++;
+
+				data[relctr] = (txtptr & 0xFF); // generate text pointer
+				relctr++;
+				data[relctr] = (txtptr & 0xFF00) >> 8;
+				relctr++;
+				txtptr += i;
+				break;
+			}
+			relptr = 0;
+			memset(data_buff, 0, sizeof(data_buff));
+			tsv.getline(data_buff, unsigned(-1), '-');
+		}
+
+
+		relctr = 0;
+
+		do{
+			switch (relptrbuffer[relctr])
+			{
+			default:
+				rel_offset = 2;
+				while (relptrbuffer[relctr] != 0){
+					switch(relptrbuffer[relctr + rel_offset]){
+					case -1:
+					case -2:
+					case -3:	
+					case 1:
+					case 2:
+					case 3:
+						if (relptrbuffer[relctr] > 0){
+							relptrbuffer[relctr] += (relptrbuffer[relctr + rel_offset]) * 2;
+						}
+						else
+						{
+							relptrbuffer[relctr] -= (relptrbuffer[relctr + rel_offset]) * 2;
+						}
+					default:
+						if (relptrbuffer[relctr] > 0){
+							relptrbuffer[relctr] -= 2;
+							rel_offset += 2;
+						}
+						else
+						{
+							relptrbuffer[relctr] += 2;
+							rel_offset -= 2;
+						}
+					}
+				}
+				data[relctr] = (rel_offset + relctr) & 0xFF;
+				data[relctr + 1] = ((rel_offset + relctr) & 0xFF00) >> 8;
+			case 0:
+			case -1:
+			case -2:
+			case -3:
+				relctr += 2;
+				break;
+			}
+		} while (relctr < headptr);
+	/*do{
+		switch (relptr){
+		case 0x4016:
+		case 0x3016:
+		case 0x2016:
+		case 0x1016:{
+			data[relctr] = (relptr & 0xFF);
+			relctr++;
+			data[relctr] = (relptr & 0xFF00) >> 8;
+			relctr++;
+			tsv.ignore(unsigned(-1), '\0');
+			tsv >> hex >> relptr;
+			data[relctr] = (relptr & 0xFF);
+			relctr++;
+			data[relctr] = (relptr & 0xFF00) >> 8;
+			relctr++;
+			tsv.ignore(unsigned(-1), '\t');
+			tsv >> tsvstring;
+			txtptr += tsvstring.length();
+			tsv.getline((data + txtptr + headptr), unsigned(-1), '\0');
+			data[relctr] = (txtptr & 0xFF);
+			relctr++;
+			data[relctr] = (txtptr & 0xFF00) >> 8;
+			relctr++;
+			tsv.ignore(unsigned(-1), '\n');
+			break;
+		}
+		case 0x3011:{
+			data[relctr] = (relptr & 0xFF);
+			relctr++;
+			data[relctr] = (relptr & 0xFF00) >> 8;
+			relctr++;
+			tsv.ignore(unsigned(-1), '\0');
+			tsv >> hex >> relptr;
+		}
+		case 0x101a:{
+			data[relctr] = (relptr & 0xFF);
+			relctr++;
+			data[relctr] = (relptr & 0xFF00) >> 8;
+			relctr++;
+			tsv.ignore(unsigned(-1), '\0');
+			tsv >> hex >> relptr;
+			data[relctr] = (relptr & 0xFF);
+			relctr++;
+			data[relctr] = (relptr & 0xFF00) >> 8;
+			relctr++;
+			tsv.ignore(unsigned(-1), '\0');
+			tsv >> tsvstring;
+			txtptr += tsvstring.length();
+			tsv.getline((data + txtptr + headptr), unsigned(-1), '\0');
+			//tsv >> tsvstring;
+			//txtptr += tsvstring.length();
+			//(data + txtptr) = tsvstring;
+			data[relctr] = (txtptr & 0xFF);
+			relctr++;
+			data[relctr] = (txtptr & 0xFF00) >> 8;
+			relctr++;
+			//txtptr += tsvstring.length();
+			//tsv.ignore(-1, '\0');
+			break;
+		}
+		default:{
+			data[relctr] = (relptr & 0xFF);
+			relctr++;
+			data[relctr] = (relptr & 0xFF00) >> 8;
+			relctr++;
+			//getline(tsv, tsvstring, '\t');
+			//cout << tsvstring;
+			//relptr = tsvstring;
+			tsv.ignore(unsigned(-1), '\0');
+		}
+		}
+		tsv >> hex >> relptr;
+		} while (relctr != headptr);*/
+
+		/*for (int i = 0; i < (sizeof(command_list) / sizeof(unsigned int)); i++){
+			if (relptr == command_list[i]){
+				data[relctr] = (relptr & 0xFF);
+				relctr++;
+				data[relctr] = (relptr & 0xFF00) >> 8;
+				relctr++;
+				tsv.ignore(unsigned(-1), '\0');
+				tsv >> hex >> relptr;
+				if (relptr == 0){
+					if (i == 7){
+						data[relctr] = (relptr & 0xFF);
+						relctr++;
+						data[relctr] = (relptr & 0xFF00) >> 8;
+						relctr++;
+						tsv.ignore(unsigned(-1), '\0');
+						tsv >> hex >> relptr;
+					}
+					else {
+						data[relctr] = 0;
+						relctr++;
+						data[relctr] = 0;
+						relctr++;
+						data[relctr] = (txtptr + headptr) & 0xFF;
+						relctr++;
+						data[relctr] = (txtptr + headptr) & 0xFF00;
+						relctr++;
+						tsv >> tsvstring;
+						tsv >> (data + txtptr + headptr);
+						txtptr += tsvstring.length();
+						tsv.ignore(unsigned(-1), '\0');
+					}
+				}
+			}
+		}
+	} while (relctr < headptr);*/
+
+	/*do{
 		relptr = (data[relctr] & 0xFF);
 		relctr++;
 		relptr += (data[relctr] & 0xFF) << 8;
@@ -432,7 +875,7 @@ void yuna2_tsv_in()
 				}
 			}
 		}
-	} while (relctr < headptr);
+	} while (relctr < headptr);*/
 
 	tsv.close();
 
@@ -462,10 +905,11 @@ int main(int argc, char* argv[])
 		{
 			cout << "ENTER;" << endl << 
 				"1 TO DUMP ISO TO BINARY SCRIPT" << endl << 
-				"2 TO GENERATE TABLE/TXT FILES FROM BINARY" << endl << 
-				"3 TO REGENERATE DAT FILES" << endl << 
+				"2 YUNA1 TABLE/TXT FILES FROM BINARY" << endl << 
+				"3 YUNA1 REGENERATE DAT FILES" << endl << 
 				"4 TO REINSERT SCRIPTS" << endl <<
-				"5 YUNA 2 DAT POINTER EXTRACTOR" << endl;
+				"5 YUNA2 CSV SCRIPT EXTRACTOR" << endl <<
+				"6 YUNA2 DAT REGENERATOR" << endl;
 			char input;
 			cin >> input;
 			switch (input)
@@ -516,6 +960,17 @@ int main(int argc, char* argv[])
 					output_bin_rw(READ);
 					yuna2_tsv_out();
 					output_rw(WRITE);
+					output_file_inc();
+				}
+				break;
+			}
+			case ('6') : //insert
+			{
+				while (out_file_num != NUMBEROFBLOCKS)
+				{
+					output_rw(READ);
+					yuna2_tsv_in();
+					output_bin_rw(WRITE);
 					output_file_inc();
 				}
 				break;
